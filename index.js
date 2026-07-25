@@ -15,6 +15,9 @@ import ai from './lib/ai.js';
 import workerPool from './lib/worker.js';
 import telegram from './lib/telegram.js';
 import fs from 'fs';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,8 +35,89 @@ const startExpress = () => {
   app.post('/webhook', payment.midtransWebhookHandler);
 
   app.get('/stats', async (req, res) => {
+    const mem = process.memoryUsage();
     const stats = db.getStats();
-    res.json({ ...stats, uptime: process.uptime() });
+    res.json({ ...stats, uptime: process.uptime(), memory: `${Math.round(mem.heapUsed / 1024 / 1024)}MB`, activityCount: db.getActivityLogs(null, 1000).length });
+  });
+
+  app.get('/admin/protection', (req, res) => {
+    try {
+      const raw = fs.readFileSync(path.join(__dirname, 'data', 'protection.json'), 'utf8');
+      res.json(JSON.parse(raw));
+    } catch (err) {
+      res.json({ enabled: true, antiReport: true, antiKenon: true, antiBanned: true, antiSpam: true, antiLink: true, antiMentionFlood: true, maxMentionCount: 5 });
+    }
+  });
+
+  app.post('/admin/protection', (req, res) => {
+    const { key, value } = req.body || {};
+    const protectionFile = path.join(__dirname, 'data', 'protection.json');
+    let state = { enabled: true, antiReport: true, antiKenon: true, antiBanned: true, antiSpam: true, antiLink: true, antiMentionFlood: true, maxMentionCount: 5 };
+    try {
+      state = JSON.parse(fs.readFileSync(protectionFile, 'utf8'));
+    } catch (err) {}
+
+    if (key === 'enabled') {
+      state.enabled = value === true || value === 'true' || value === 1;
+    } else if (key === 'maxMentionCount') {
+      state.maxMentionCount = Number(value) || 5;
+    } else if (typeof state[key] === 'boolean') {
+      state[key] = value === true || value === 'true' || value === 1;
+    }
+
+    fs.mkdirSync(path.dirname(protectionFile), { recursive: true });
+    fs.writeFileSync(protectionFile, JSON.stringify(state, null, 2));
+    res.json(state);
+  });
+
+  app.get('/activity', (req, res) => {
+    const userId = req.query.userId?.trim() || null;
+    const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 20));
+    const logs = db.getActivityLogs(userId, limit);
+    res.json({ logs, count: logs.length });
+  });
+
+  app.get('/healthz', (req, res) => {
+    const mem = process.memoryUsage();
+    res.json({
+      status: 'ok',
+      uptime: process.uptime(),
+      memory: {
+        rss: `${Math.round(mem.rss / 1024 / 1024)}MB`,
+        heapUsed: `${Math.round(mem.heapUsed / 1024 / 1024)}MB`,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  app.post('/backup', (req, res) => {
+    const backupPath = db.createBackup(req.body?.label || 'manual');
+    res.json({ success: true, backupPath });
+  });
+
+  app.post('/restore', (req, res) => {
+    const backupPath = req.body?.backupPath;
+    if (!backupPath) return res.status(400).json({ success: false, error: 'backupPath required' });
+    const ok = db.restoreBackup(backupPath);
+    res.json({ success: ok });
+  });
+
+  app.post('/activity/clear', (req, res) => {
+    const userId = req.body?.userId?.trim() || null;
+    db.clearActivityLogs(userId);
+    res.json({ success: true, userId });
+  });
+
+  app.get('/activity/export', (req, res) => {
+    const userId = req.query.userId?.trim() || null;
+    const exportData = db.exportActivityLogs(userId, 1000);
+    res.json(exportData);
+  });
+
+  app.get('/logs', (req, res) => {
+    const logFile = path.join(__dirname, 'logs', 'errors.log');
+    if (!fs.existsSync(logFile)) return res.type('text/plain').send('');
+    res.type('text/plain').send(fs.readFileSync(logFile, 'utf8'));
   });
 
   const startServer = (port) => {
@@ -96,6 +180,7 @@ const handleMessage = async (sock, m, plugins) => {
       }
       db.setUserName(sender, name);
       db.setUserStatus(sender, 'pending');
+      await db.logActivity(sender, 'register', name);
       const ownerNumber = config.ownerNumber?.replace(/\D/g, '') || '';
       if (ownerNumber) {
         await sock.sendMessage(`${ownerNumber}@s.whatsapp.net`, { text: `⚠️ Permintaan akses bot dari ${name} (${sender}).
@@ -114,6 +199,8 @@ Balas dengan .confirm ${sender}` });
       const targetUser = db.getUser(`${target}@s.whatsapp.net`);
       db.setUserLevel(`${target}@s.whatsapp.net`, 'free');
       db.setUserStatus(`${target}@s.whatsapp.net`, 'approved');
+      await db.logActivity(sender, 'approve', target);
+      await db.logActivity(`${target}@s.whatsapp.net`, 'approved', 'owner approval');
       await sock.sendMessage(m.key.remoteJid, { text: `User ${target} disetujui.` });
       await sock.sendMessage(`${target}@s.whatsapp.net`, { text: 'Akses Anda telah disetujui. Anda bisa mulai memakai bot.' });
       return;
@@ -137,9 +224,11 @@ Balas dengan .confirm ${sender}` });
         const target = commandText.replace('reset limit', '').trim().replace(/\D/g, '');
         if (!target) {
           db.resetUsage();
+          await db.logActivity(sender, 'admin-reset-all', 'reset limit');
           await sock.sendMessage(m.key.remoteJid, { text: 'Semua limit gratis user telah di-reset.' });
         } else {
           db.resetUserUsage(`${target}@s.whatsapp.net`);
+          await db.logActivity(sender, 'admin-reset-user', target);
           await sock.sendMessage(m.key.remoteJid, { text: `Limit user ${target} telah di-reset.` });
         }
         return;
@@ -152,7 +241,10 @@ Balas dengan .confirm ${sender}` });
           return;
         }
         const targetUser = db.getUser(`${target}@s.whatsapp.net`);
-        const detailText = `User: ${target}\nLevel: ${targetUser.level}\nStatus: ${targetUser.status || 'pending'}\nBanned: ${targetUser.banned ? 'ya' : 'tidak'}\nLimit: ${targetUser.usage_count}/${targetUser.usage_limit}`;
+        const recentLogs = db.getActivityLogs(`${target}@s.whatsapp.net`, 5)
+          .map((entry) => `${new Date(entry.timestamp).toLocaleString()} :: ${entry.action} :: ${entry.details}`)
+          .join('\n');
+        const detailText = `User: ${target}\nLevel: ${targetUser.level}\nStatus: ${targetUser.status || 'pending'}\nBanned: ${targetUser.banned ? 'ya' : 'tidak'}\nLimit: ${targetUser.usage_count}/${targetUser.usage_limit}\n\nAktivitas Terbaru:\n${recentLogs || 'Tidak ada aktivitas.'}`;
         await sock.sendMessage(m.key.remoteJid, { text: detailText });
         return;
       }
@@ -164,6 +256,7 @@ Balas dengan .confirm ${sender}` });
           return;
         }
         db.setUserBan(`${target}@s.whatsapp.net`, true);
+        await db.logActivity(sender, 'admin-ban', target);
         await sock.sendMessage(m.key.remoteJid, { text: `User ${target} telah diban.` });
         return;
       }
@@ -175,6 +268,7 @@ Balas dengan .confirm ${sender}` });
           return;
         }
         db.setUserBan(`${target}@s.whatsapp.net`, false);
+        await db.logActivity(sender, 'admin-unban', target);
         await sock.sendMessage(m.key.remoteJid, { text: `User ${target} telah di-unban.` });
         return;
       }
@@ -182,7 +276,10 @@ Balas dengan .confirm ${sender}` });
 
     if (!db.canUseBot(sender)) {
       const status = user.status || 'pending';
-      if (status === 'pending') {
+      const updatedUser = db.getUser(sender);
+      if (updatedUser.banned) {
+        await sock.sendMessage(m.key.remoteJid, { text: 'Akun Anda telah diban karena melanggar aturan bot.' });
+      } else if (status === 'pending') {
         await sock.sendMessage(m.key.remoteJid, { text: 'Anda belum terdaftar. Kirim register <nama> untuk mendaftar, lalu tunggu owner menyetujui akses.' });
       } else if (user.level === 'free') {
         await sock.sendMessage(m.key.remoteJid, { text: 'Limit gratis Anda sudah habis. Upgrade ke premium untuk akses tanpa batas.' });
@@ -193,6 +290,18 @@ Balas dengan .confirm ${sender}` });
     }
 
     const activePlugins = plugins.filter((plugin) => plugin.intents?.includes(intent) || plugin.alias?.includes(intent));
+    const suspiciousCommand = !activePlugins.length && !isDM && intent !== 'status' && intent !== 'registration' && intent !== 'approval' && intent !== 'admin' && intent !== 'ai-chat';
+    if (suspiciousCommand && user.level === 'free') {
+      const currentUser = db.getUser(sender);
+      if (currentUser.abuse_count >= 4) {
+        db.setUserBan(sender, true);
+        await db.logActivity(sender, 'auto-ban', 'repeated suspicious commands');
+        await sock.sendMessage(m.key.remoteJid, { text: 'Akun Anda diban karena abuse berulang.' });
+        return;
+      }
+      db.incrementAbuse(sender);
+      await db.logActivity(sender, 'abuse', `intent=${intent}`);
+    }
     if (!activePlugins.length) {
       if (intent === 'ai-chat' || isDM) {
         db.incrementUsage(sender);
@@ -216,11 +325,55 @@ Balas dengan .confirm ${sender}` });
           await sock.sendMessage(m.key.remoteJid, { text: `⚠️ Sisa limit gratis Anda: ${remaining}/20. Upgrade premium untuk akses tanpa batas.` });
         }
       }
+      await db.logActivity(sender, 'command', `${intent}:${text.slice(0, 80)}`);
       await plugin.execute({ sock, message, m, sender, entities, db, ai, payment, workerPool, config });
     }
   } catch (error) {
     console.error('handleMessage error', error);
   }
+};
+
+const rotateLogs = () => {
+  const logDir = path.join(__dirname, 'logs');
+  fs.mkdirSync(logDir, { recursive: true });
+  const today = new Date().toISOString().slice(0, 10);
+  const currentLog = path.join(logDir, 'errors.log');
+  const rotatedLog = path.join(logDir, `errors-${today}.log`);
+  if (fs.existsSync(currentLog) && !fs.existsSync(rotatedLog)) {
+    fs.copyFileSync(currentLog, rotatedLog);
+    fs.writeFileSync(currentLog, '');
+  }
+};
+
+const writeErrorLog = (message, error) => {
+  rotateLogs();
+  const logDir = path.join(__dirname, 'logs');
+  fs.mkdirSync(logDir, { recursive: true });
+  const logFile = path.join(logDir, 'errors.log');
+  const timestamp = new Date().toISOString();
+  const details = error instanceof Error ? `${error.stack || error.message}` : String(error);
+  fs.appendFileSync(logFile, `[${timestamp}] ${message}\n${details}\n\n`);
+};
+
+const scheduleBackups = () => {
+  const backupIntervalMs = Number(process.env.BACKUP_INTERVAL_MS || 60 * 60 * 1000);
+  setInterval(() => {
+    try {
+      const backupPath = db.createBackup('scheduled');
+      console.log(`Backup otomatis dibuat: ${backupPath}`);
+    } catch (err) {
+      console.error('Backup otomatis gagal', err);
+      writeErrorLog('Backup otomatis gagal', err);
+    }
+  }, backupIntervalMs);
+};
+
+const restartWithBackoff = () => {
+  const waitMs = Math.min(30000, 5000 * (Number(process.env.RESTART_ATTEMPTS || 1) || 1));
+  setTimeout(() => {
+    console.log(`Restarting bot after crash in ${waitMs / 1000}s`);
+    process.exit(1);
+  }, waitMs);
 };
 
 const startBot = async () => {
@@ -237,6 +390,10 @@ const startBot = async () => {
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr, pairingCode } = update;
+    if (connection === 'open') {
+      console.log('WhatsApp connected');
+      try { await telegram.sendHeartbeat(); } catch (err) { console.error(err); }
+    }
     if (qr && config.authMode === 'qr') {
       try {
         const qrString = await qrcode.toString(qr, { type: 'terminal', small: true });
@@ -257,9 +414,6 @@ const startBot = async () => {
         setTimeout(startBot, 5000);
       }
     }
-    if (connection === 'open') {
-      console.log('WhatsApp connected');
-    }
   });
 
   sock.ev.on('creds.update', saveCreds);
@@ -267,6 +421,7 @@ const startBot = async () => {
   let plugins = await loadPlugins();
   watchPlugins(async () => { plugins = await loadPlugins(); });
   telegram.initTelegram();
+  scheduleBackups();
 
   sock.ev.on('messages.upsert', async (update) => {
     if (!update.messages?.length) return;
@@ -289,12 +444,17 @@ if (cluster.isPrimary) {
   }
   startExpress();
 } else {
-  process.on('uncaughtException', (err) => {
+  process.on('uncaughtException', async (err) => {
     console.error('Uncaught exception', err);
-    process.exit(1);
+    writeErrorLog('Uncaught exception', err);
+    try { await telegram.reportError(err, 'uncaught-exception'); } catch (notifyErr) { console.error(notifyErr); }
+    restartWithBackoff();
   });
-  process.on('unhandledRejection', (err) => {
+  process.on('unhandledRejection', async (err) => {
     console.error('Unhandled rejection', err);
+    writeErrorLog('Unhandled rejection', err);
+    try { await telegram.reportError(err, 'unhandled-rejection'); } catch (notifyErr) { console.error(notifyErr); }
+    restartWithBackoff();
   });
   startBot();
 }

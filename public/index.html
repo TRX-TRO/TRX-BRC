@@ -5,27 +5,241 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TroxzyMD Dashboard</title>
   <style>
-    body { font-family: Inter, system-ui, sans-serif; background: #0b1120; color: #f8fafc; margin: 0; padding: 0; }
-    .container { max-width: 960px; margin: 0 auto; padding: 24px; }
-    h1 { font-size: 2.6rem; margin-bottom: 16px; }
-    .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 18px; padding: 20px; margin-bottom: 16px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
-    .stat { font-size: 3rem; margin: 0; }
-    .label { color: #94a3b8; }
+    :root {
+      color-scheme: dark;
+      --bg: #060816;
+      --panel: rgba(255,255,255,0.06);
+      --panel-strong: rgba(255,255,255,0.1);
+      --border: rgba(255,255,255,0.13);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #8b5cf6;
+      --accent-2: #22d3ee;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(34,211,238,0.16), transparent 24%),
+        radial-gradient(circle at top right, rgba(139,92,246,0.2), transparent 30%),
+        var(--bg);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .container { max-width: 1180px; margin: 0 auto; }
+    .hero {
+      display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      padding: 24px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+      border: 1px solid var(--border);
+      box-shadow: 0 18px 48px rgba(0,0,0,0.25);
+      margin-bottom: 18px;
+    }
+    .eyebrow {
+      margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.24em;
+      font-size: 0.78rem; color: var(--accent-2);
+      font-weight: 700;
+    }
+    h1 { margin: 0 0 8px; font-size: 2rem; }
+    .sub { margin: 0; color: var(--muted); max-width: 720px; }
+    .status-pill {
+      padding: 10px 14px; border-radius: 999px; background: rgba(34,211,238,0.16);
+      color: #a7f3d0; border: 1px solid rgba(34,211,238,0.25); font-weight: 700; white-space: nowrap;
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 18px; }
+    .card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 16px;
+      backdrop-filter: blur(14px);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+    .card .label { color: var(--muted); font-size: 0.9rem; margin: 0 0 8px; }
+    .stat { font-size: 2rem; margin: 0; font-weight: 700; }
+    .panel { padding: 18px; }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .panel-header h2 { margin: 0; font-size: 1.15rem; }
+    .controls { display: flex; gap: 10px; align-items: center; }
+    .controls input {
+      padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: rgba(255,255,255,0.04);
+      color: var(--text); min-width: 220px;
+    }
+    .controls button {
+      padding: 10px 12px; border-radius: 10px; border: none; cursor: pointer; font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: white;
+    }
+    .controls .ghost {
+      background: rgba(255,255,255,0.08); color: var(--text); border: 1px solid var(--border);
+    }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    .toggle-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 14px; }
+    .toggle-item {
+      display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-radius: 14px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    }
+    .toggle-item label { font-weight: 600; }
+    .switch { position: relative; width: 50px; height: 28px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; inset: 0; background: rgba(255,255,255,0.2); border-radius: 999px; cursor: pointer; transition: 0.2s; }
+    .slider:before { content: ''; position: absolute; width: 22px; height: 22px; left: 3px; top: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+    .switch input:checked + .slider { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+    .switch input:checked + .slider:before { transform: translateX(22px); }
+    .activity-list { display: flex; flex-direction: column; gap: 10px; }
+    .activity-item {
+      display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+      transition: transform 0.18s ease, background 0.18s ease;
+    }
+    .activity-item:hover { transform: translateY(-1px); background: rgba(255,255,255,0.07); }
+    .badge {
+      min-width: 84px; text-align: center; padding: 6px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; color: white;
+    }
+    .badge.register { background: linear-gradient(135deg, #8b5cf6, #6366f1); }
+    .badge.approve { background: linear-gradient(135deg, #06b6d4, #0ea5e9); }
+    .badge['admin-ban'] { background: linear-gradient(135deg, #ef4444, #f97316); }
+    .badge['admin-unban'] { background: linear-gradient(135deg, #10b981, #22c55e); }
+    .badge.command { background: linear-gradient(135deg, #f59e0b, #f43f5e); }
+    .badge.abuse { background: linear-gradient(135deg, #fb923c, #ef4444); }
+    .badge['auto-ban'] { background: linear-gradient(135deg, #dc2626, #7f1d1d); }
+    .activity-meta { flex: 1; }
+    .activity-meta strong { display: block; margin-bottom: 3px; }
+    .activity-meta .detail { color: var(--muted); font-size: 0.9rem; }
+    .time { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
+    .empty { text-align: center; padding: 24px; color: var(--muted); }
+    @media (max-width: 700px) {
+      body { padding: 12px; }
+      .hero, .panel-header { flex-direction: column; align-items: flex-start; }
+      .controls { width: 100%; flex-wrap: wrap; }
+      .controls input { min-width: 0; width: 100%; }
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>TroxzyMD Dashboard</h1>
-    <div class="grid">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">TroxzyMD • Live Activity Center</p>
+        <h1>Monitor aktivitas bot dengan tampilan modern</h1>
+        <p class="sub">Pantau register, approval, ban, abuse, dan command dari satu panel yang lebih canggih dan intuitif.</p>
+      </div>
+      <div class="status-pill" id="liveStatus">● Live</div>
+    </header>
+
+    <section class="grid">
       <div class="card"><p class="label">Total Users</p><p id="totalUsers" class="stat">-</p></div>
       <div class="card"><p class="label">Premium Users</p><p id="premiumUsers" class="stat">-</p></div>
       <div class="card"><p class="label">Commands Today</p><p id="commandsToday" class="stat">-</p></div>
       <div class="card"><p class="label">Uptime</p><p id="uptime" class="stat">-</p></div>
       <div class="card"><p class="label">Memory</p><p id="memory" class="stat">-</p></div>
-    </div>
+      <div class="card"><p class="label">Activity Logs</p><p id="activityCount" class="stat">-</p></div>
+    </section>
+
+    <section class="card panel">
+      <div class="panel-header">
+        <div>
+          <p class="label">Proteksi grup</p>
+          <h2>Kontrol proteksi langsung</h2>
+        </div>
+      </div>
+      <div class="toggle-grid" id="protectionControls"></div>
+      <div class="actions">
+        <button id="backupBtn" type="button">Backup Data</button>
+        <button id="healthBtn" class="ghost" type="button">Health Check</button>
+        <button id="logsBtn" class="ghost" type="button">Open Logs</button>
+      </div>
+    </section>
+
+    <section class="card panel">
+      <div class="panel-header">
+        <div>
+          <p class="label">Aktivitas terbaru</p>
+          <h2>Live activity feed</h2>
+        </div>
+        <div class="controls">
+          <input id="filterUser" placeholder="Filter user..." />
+          <button id="refreshBtn" type="button">Refresh</button>
+          <button id="clearLogsBtn" class="ghost" type="button">Clear Logs</button>
+          <button id="exportLogsBtn" class="ghost" type="button">Export</button>
+        </div>
+      </div>
+      <div id="activityList" class="activity-list"></div>
+    </section>
   </div>
+
   <script>
+    const formatTime = (timestamp) => new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(timestamp));
+    const formatAction = (action) => {
+      const map = {
+        register: { label: 'Register', icon: '📝' },
+        approve: { label: 'Approve', icon: '✅' },
+        'admin-ban': { label: 'Ban', icon: '🚫' },
+        'admin-unban': { label: 'Unban', icon: '🔓' },
+        command: { label: 'Command', icon: '⚡' },
+        abuse: { label: 'Abuse', icon: '⚠️' },
+        'auto-ban': { label: 'Auto Ban', icon: '🛑' },
+        'admin-reset-all': { label: 'Reset All', icon: '♻️' },
+        'admin-reset-user': { label: 'Reset User', icon: '🔄' },
+      };
+      return map[action] || { label: action, icon: '📌' };
+    };
+
+    const renderLogs = (logs) => {
+      const list = document.getElementById('activityList');
+      if (!logs.length) {
+        list.innerHTML = '<div class="empty">Belum ada aktivitas yang tercatat.</div>';
+        return;
+      }
+      list.innerHTML = logs.map((entry) => {
+        const actionMeta = formatAction(entry.action);
+        const details = entry.details ? String(entry.details).slice(0, 90) : 'Tidak ada detail';
+        const userId = entry.userId || '-';
+        return `
+          <div class="activity-item">
+            <span class="badge ${entry.action}">${actionMeta.icon} ${actionMeta.label}</span>
+            <div class="activity-meta">
+              <strong>${userId}</strong>
+              <div class="detail">${details}</div>
+            </div>
+            <div class="time">${formatTime(entry.timestamp)}</div>
+          </div>`;
+      }).join('');
+    };
+
+    const renderProtectionControls = (state) => {
+      const container = document.getElementById('protectionControls');
+      const items = [
+        ['enabled', 'Proteksi Utama'],
+        ['antiLink', 'Anti Link'],
+        ['antiSpam', 'Anti Spam'],
+        ['antiMentionFlood', 'Anti Mention'],
+        ['antiReport', 'Anti Report'],
+        ['antiKenon', 'Anti Kenon'],
+        ['antiBanned', 'Anti Banned'],
+      ];
+      container.innerHTML = items.map(([key, label]) => `
+        <div class="toggle-item">
+          <label for="${key}">${label}</label>
+          <div class="switch">
+            <input id="${key}" type="checkbox" ${state[key] ? 'checked' : ''} />
+            <span class="slider"></span>
+          </div>
+        </div>`).join('');
+
+      container.querySelectorAll('input').forEach((input) => {
+        input.addEventListener('change', async () => {
+          const value = input.checked;
+          const payload = { key: input.id, value };
+          await fetch('/admin/protection', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          await refresh();
+        });
+      });
+    };
+
     const refresh = async () => {
       try {
         const res = await fetch('/stats');
@@ -35,10 +249,70 @@
         document.getElementById('commandsToday').textContent = data.commandsToday ?? '-';
         document.getElementById('uptime').textContent = Math.floor(data.uptime ?? 0) + 's';
         document.getElementById('memory').textContent = data.memory ?? '-';
+        document.getElementById('activityCount').textContent = data.activityCount ?? '-';
+      } catch (err) {
+        console.error(err);
+      }
+
+      try {
+        const protectionRes = await fetch('/admin/protection');
+        const protectionState = await protectionRes.json();
+        renderProtectionControls(protectionState);
+      } catch (err) {
+        console.error(err);
+      }
+
+      try {
+        const userFilter = document.getElementById('filterUser').value.trim();
+        const activityRes = await fetch(`/activity?limit=20${userFilter ? `&userId=${encodeURIComponent(userFilter)}` : ''}`);
+        const activityData = await activityRes.json();
+        renderLogs(activityData.logs || []);
       } catch (err) {
         console.error(err);
       }
     };
+
+    document.getElementById('refreshBtn').addEventListener('click', refresh);
+    document.getElementById('backupBtn').addEventListener('click', async () => {
+      const res = await fetch('/backup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label: 'dashboard' }) });
+      const data = await res.json();
+      alert(data.success ? `Backup dibuat: ${data.backupPath}` : 'Backup gagal');
+    });
+    document.getElementById('healthBtn').addEventListener('click', async () => {
+      const res = await fetch('/healthz');
+      const data = await res.json();
+      alert(JSON.stringify(data, null, 2));
+    });
+    document.getElementById('logsBtn').addEventListener('click', async () => {
+      const res = await fetch('/logs');
+      const text = await res.text();
+      alert(text || 'Belum ada log error.');
+    });
+    document.getElementById('clearLogsBtn').addEventListener('click', async () => {
+      const userFilter = document.getElementById('filterUser').value.trim();
+      await fetch('/activity/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: userFilter || null }),
+      });
+      await refresh();
+    });
+    document.getElementById('exportLogsBtn').addEventListener('click', async () => {
+      const userFilter = document.getElementById('filterUser').value.trim();
+      const res = await fetch(`/activity/export${userFilter ? `?userId=${encodeURIComponent(userFilter)}` : ''}`);
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `activity-${userFilter || 'all'}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    });
+    document.getElementById('filterUser').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') refresh();
+    });
+
     refresh();
     setInterval(refresh, 5000);
   </script>

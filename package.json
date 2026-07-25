@@ -6,8 +6,10 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "dev": "node index.js",
     "generate-plugins": "node generator/PluginGenerator.js",
-    "lint": "echo 'No lint configured'"
+    "lint": "echo 'No lint configured'",
+    "test": "node --test test/database.test.js"
   },
   "engines": {
     "node": ">=20.0.0 <25.0.0"
