@@ -123,6 +123,8 @@ Balas dengan .confirm ${sender}` });
       const status = user.status || 'pending';
       if (status === 'pending') {
         await sock.sendMessage(m.key.remoteJid, { text: 'Anda belum terdaftar. Kirim register <nama> untuk mendaftar.' });
+      } else if (user.level === 'free') {
+        await sock.sendMessage(m.key.remoteJid, { text: 'Limit gratis Anda sudah habis. Silakan beli premium atau tunggu approval ulang.' });
       } else {
         await sock.sendMessage(m.key.remoteJid, { text: 'Akses Anda belum disetujui owner.' });
       }
@@ -147,6 +149,11 @@ Balas dengan .confirm ${sender}` });
       }
       if (user.level === 'free' && user.status === 'approved') {
         db.incrementUsage(sender);
+        const updatedUser = db.getUser(sender);
+        const remaining = Math.max(0, updatedUser.usage_limit - updatedUser.usage_count);
+        if (remaining <= 3) {
+          await sock.sendMessage(m.key.remoteJid, { text: `⚠️ Sisa limit gratis Anda: ${remaining}/20` });
+        }
       }
       await plugin.execute({ sock, message, m, sender, entities, db, ai, payment, workerPool, config });
     }
