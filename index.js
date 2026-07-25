@@ -139,7 +139,6 @@ Balas dengan .confirm ${sender}` });
           db.resetUsage();
           await sock.sendMessage(m.key.remoteJid, { text: 'Semua limit gratis user telah di-reset.' });
         } else {
-          const targetUser = db.getUser(`${target}@s.whatsapp.net`);
           db.resetUserUsage(`${target}@s.whatsapp.net`);
           await sock.sendMessage(m.key.remoteJid, { text: `Limit user ${target} telah di-reset.` });
         }
@@ -153,8 +152,30 @@ Balas dengan .confirm ${sender}` });
           return;
         }
         const targetUser = db.getUser(`${target}@s.whatsapp.net`);
-        const detailText = `User: ${target}\nLevel: ${targetUser.level}\nStatus: ${targetUser.status || 'pending'}\nLimit: ${targetUser.usage_count}/${targetUser.usage_limit}`;
+        const detailText = `User: ${target}\nLevel: ${targetUser.level}\nStatus: ${targetUser.status || 'pending'}\nBanned: ${targetUser.banned ? 'ya' : 'tidak'}\nLimit: ${targetUser.usage_count}/${targetUser.usage_limit}`;
         await sock.sendMessage(m.key.remoteJid, { text: detailText });
+        return;
+      }
+
+      if (commandText.startsWith('ban ')) {
+        const target = commandText.replace('ban ', '').trim().replace(/\D/g, '');
+        if (!target) {
+          await sock.sendMessage(m.key.remoteJid, { text: 'Format: ban <nomor>' });
+          return;
+        }
+        db.setUserBan(`${target}@s.whatsapp.net`, true);
+        await sock.sendMessage(m.key.remoteJid, { text: `User ${target} telah diban.` });
+        return;
+      }
+
+      if (commandText.startsWith('unban ')) {
+        const target = commandText.replace('unban ', '').trim().replace(/\D/g, '');
+        if (!target) {
+          await sock.sendMessage(m.key.remoteJid, { text: 'Format: unban <nomor>' });
+          return;
+        }
+        db.setUserBan(`${target}@s.whatsapp.net`, false);
+        await sock.sendMessage(m.key.remoteJid, { text: `User ${target} telah di-unban.` });
         return;
       }
     }
