@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TroxzyMD Dashboard</title>
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; background: #0b1120; color: #f8fafc; margin: 0; padding: 0; }
+    .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 2.6rem; margin-bottom: 16px; }
+    .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 18px; padding: 20px; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+    .stat { font-size: 3rem; margin: 0; }
+    .label { color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>TroxzyMD Dashboard</h1>
+    <div class="grid">
+      <div class="card"><p class="label">Total Users</p><p id="totalUsers" class="stat">-</p></div>
+      <div class="card"><p class="label">Premium Users</p><p id="premiumUsers" class="stat">-</p></div>
+      <div class="card"><p class="label">Commands Today</p><p id="commandsToday" class="stat">-</p></div>
+      <div class="card"><p class="label">Uptime</p><p id="uptime" class="stat">-</p></div>
+      <div class="card"><p class="label">Memory</p><p id="memory" class="stat">-</p></div>
+    </div>
+  </div>
+  <script>
+    const refresh = async () => {
+      try {
+        const res = await fetch('/stats');
+        const data = await res.json();
+        document.getElementById('totalUsers').textContent = data.totalUsers ?? '-';
+        document.getElementById('premiumUsers').textContent = data.premiumUsers ?? '-';
+        document.getElementById('commandsToday').textContent = data.commandsToday ?? '-';
+        document.getElementById('uptime').textContent = Math.floor(data.uptime ?? 0) + 's';
+        document.getElementById('memory').textContent = data.memory ?? '-';
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    refresh();
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>
