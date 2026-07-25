@@ -84,6 +84,7 @@ public/
 - Keep your `.env` file private.
 - Session files are stored under the `sessions` folder.
 - Bot data is stored in `data/`.
+- Protection features such as anti-report, anti-kenon, anti-banned, anti-link, and anti-spam are available through the group protection plugin.
 
 ## 📄 License
 
