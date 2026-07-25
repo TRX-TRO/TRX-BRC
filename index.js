@@ -131,6 +131,34 @@ Balas dengan .confirm ${sender}` });
       return;
     }
 
+    if (intent === 'admin' && (user.level === 'owner' || user.level === 'admin')) {
+      const commandText = text.toLowerCase();
+      if (commandText.startsWith('reset limit')) {
+        const target = commandText.replace('reset limit', '').trim().replace(/\D/g, '');
+        if (!target) {
+          db.resetUsage();
+          await sock.sendMessage(m.key.remoteJid, { text: 'Semua limit gratis user telah di-reset.' });
+        } else {
+          const targetUser = db.getUser(`${target}@s.whatsapp.net`);
+          db.resetUserUsage(`${target}@s.whatsapp.net`);
+          await sock.sendMessage(m.key.remoteJid, { text: `Limit user ${target} telah di-reset.` });
+        }
+        return;
+      }
+
+      if (commandText.startsWith('cek user')) {
+        const target = commandText.replace('cek user', '').trim().replace(/\D/g, '');
+        if (!target) {
+          await sock.sendMessage(m.key.remoteJid, { text: 'Format: cek user <nomor>' });
+          return;
+        }
+        const targetUser = db.getUser(`${target}@s.whatsapp.net`);
+        const detailText = `User: ${target}\nLevel: ${targetUser.level}\nStatus: ${targetUser.status || 'pending'}\nLimit: ${targetUser.usage_count}/${targetUser.usage_limit}`;
+        await sock.sendMessage(m.key.remoteJid, { text: detailText });
+        return;
+      }
+    }
+
     if (!db.canUseBot(sender)) {
       const status = user.status || 'pending';
       if (status === 'pending') {
