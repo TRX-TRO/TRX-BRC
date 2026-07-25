@@ -119,6 +119,18 @@ Balas dengan .confirm ${sender}` });
       return;
     }
 
+    if (intent === 'status') {
+      const statusText = user.level === 'owner'
+        ? 'Status: Owner (tanpa batas)'
+        : user.level === 'premium'
+          ? 'Status: Premium'
+          : user.status === 'approved'
+            ? `Status: Approved\nLimit gratis: ${Math.max(0, user.usage_limit - user.usage_count)}/${user.usage_limit}`
+            : 'Status: Menunggu approval owner';
+      await sock.sendMessage(m.key.remoteJid, { text: statusText });
+      return;
+    }
+
     if (!db.canUseBot(sender)) {
       const status = user.status || 'pending';
       if (status === 'pending') {
