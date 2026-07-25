@@ -83,13 +83,57 @@ const handleMessage = async (sock, m, plugins) => {
     const message = m.message?.conversation || m.message?.extendedTextMessage?.text || m.message?.imageMessage?.caption || '';
     const isDM = m.key.remoteJid && m.key.remoteJid.endsWith('@s.whatsapp.net');
     const sender = m.key.participant || m.key.remoteJid;
-    const { intent, entities, confidence } = router.extractIntent(message, isDM);
+    const text = message.trim();
+    const { intent, entities, confidence } = router.extractIntent(text, isDM);
     await sock.sendPresenceUpdate('composing', m.key.remoteJid);
     const user = db.getUser(sender);
+
+    if (intent === 'registration' && isDM) {
+      const name = text.replace(/^(register|daftar|registrasi|nama)/i, '').trim();
+      if (!name) {
+        await sock.sendMessage(m.key.remoteJid, { text: 'Kirim format: register <nama>' });
+        return;
+      }
+      db.setUserName(sender, name);
+      db.setUserStatus(sender, 'pending');
+      const ownerNumber = config.ownerNumber?.replace(/\D/g, '') || '';
+      if (ownerNumber) {
+        await sock.sendMessage(`${ownerNumber}@s.whatsapp.net`, { text: `⚠️ Permintaan akses bot dari ${name} (${sender}).
+Balas dengan .confirm ${sender}` });
+      }
+      await sock.sendMessage(m.key.remoteJid, { text: `Registrasi diterima. Nama: ${name}. Menunggu persetujuan owner.` });
+      return;
+    }
+
+    if (intent === 'approval' && isDM && user.level === 'owner') {
+      const target = text.replace(/^(confirm|konfirmasi|approve|terima)/i, '').trim().replace(/\D/g, '');
+      if (!target) {
+        await sock.sendMessage(m.key.remoteJid, { text: 'Format: .confirm <nomor>' });
+        return;
+      }
+      const targetUser = db.getUser(`${target}@s.whatsapp.net`);
+      db.setUserLevel(`${target}@s.whatsapp.net`, 'free');
+      db.setUserStatus(`${target}@s.whatsapp.net`, 'approved');
+      await sock.sendMessage(m.key.remoteJid, { text: `User ${target} disetujui.` });
+      await sock.sendMessage(`${target}@s.whatsapp.net`, { text: 'Akses Anda telah disetujui. Anda bisa mulai memakai bot.' });
+      return;
+    }
+
+    if (!db.canUseBot(sender)) {
+      const status = user.status || 'pending';
+      if (status === 'pending') {
+        await sock.sendMessage(m.key.remoteJid, { text: 'Anda belum terdaftar. Kirim register <nama> untuk mendaftar.' });
+      } else {
+        await sock.sendMessage(m.key.remoteJid, { text: 'Akses Anda belum disetujui owner.' });
+      }
+      return;
+    }
+
     const activePlugins = plugins.filter((plugin) => plugin.intents?.includes(intent) || plugin.alias?.includes(intent));
     if (!activePlugins.length) {
       if (intent === 'ai-chat' || isDM) {
-        const response = await ai.aiChat({ userId: sender, content: message });
+        db.incrementUsage(sender);
+        const response = await ai.aiChat({ userId: sender, content: text });
         await sock.sendMessage(m.key.remoteJid, { text: response });
         return;
       }
@@ -100,6 +144,9 @@ const handleMessage = async (sock, m, plugins) => {
       if (!router.checkAccess(user.level, plugin.access || 'free')) {
         await sock.sendMessage(m.key.remoteJid, { text: router.accessReply(plugin.access) });
         continue;
+      }
+      if (user.level === 'free' && user.status === 'approved') {
+        db.incrementUsage(sender);
       }
       await plugin.execute({ sock, message, m, sender, entities, db, ai, payment, workerPool, config });
     }
